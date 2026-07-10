@@ -1,0 +1,288 @@
+* {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+	font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+	background-color: #f1f5f9;
+	color: #1e293b;
+	padding: 40px 20px;
+}
+
+.dashboard-wrapper {
+	max-width: 1200px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 30px;
+}
+
+.control-card, .results-card {
+	background: #ffffff;
+	border-radius: 12px;
+	box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+	padding: 30px;
+}
+
+.control-card {
+	max-width: 600px;
+	margin: 0 auto;
+	width: 100%;
+}
+
+h2, h3 {
+	color: #1e3a8a;
+	margin-bottom: 8px;
+}
+
+.subtitle {
+	color: #64748b;
+	font-size: 14px;
+	margin-bottom: 24px;
+}
+
+.form-group {
+	margin-bottom: 18px;
+}
+
+.row {
+	display: flex;
+	gap: 15px;
+}
+
+.col {
+	flex: 1;
+}
+
+label {
+	display: block;
+	font-weight: 600;
+	font-size: 13px;
+	color: #475569;
+	margin-bottom: 6px;
+}
+
+input[type="date"], select {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid #cbd5e1;
+	border-radius: 6px;
+	background-color: #f8fafc;
+	color: #334155;
+	outline: none;
+}
+
+.conditional-box {
+	background: #f8fafc;
+	border: 1px dashed #cbd5e1;
+	padding: 15px;
+	border-radius: 8px;
+}
+
+.checkbox-group {
+	display: flex;
+	gap: 10px;
+}
+
+	.checkbox-group label {
+		font-weight: 400;
+		background: #ffffff;
+		padding: 6px 12px;
+		border: 1px solid #e2e8f0;
+		border-radius: 20px;
+		cursor: pointer;
+	}
+
+button {
+	width: 100%;
+	background-color: #2563eb;
+	color: white;
+	border: none;
+	padding: 12px;
+	font-size: 15px;
+	font-weight: 600;
+	border-radius: 6px;
+	cursor: pointer;
+	margin-top: 10px;
+}
+
+	button:hover {
+		background-color: #1d4ed8;
+	}
+
+	button.disabled {
+		background-color: #cbd5e1 !important;
+		cursor: not-allowed;
+	}
+
+.error-msg {
+	background-color: #fef2f2;
+	border: 1px solid #fca5a5;
+	color: #b91c1c;
+	padding: 12px;
+	border-radius: 6px;
+	font-size: 13px;
+	margin-bottom: 15px;
+}
+
+.table-scroll-wrapper {
+	overflow-x: auto;
+	margin-top: 20px;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	font-size: 14px;
+}
+
+th, td {
+	padding: 14px 16px;
+	border-bottom: 1px solid #e2e8f0;
+}
+
+th {
+	background-color: #f8fafc;
+	color: #475569;
+	font-weight: 600;
+}
+
+tr:hover {
+	background-color: #f8fafc;
+}
+
+.badge-rating {
+	background-color: #fef9c3;
+	color: #854d0e;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-weight: 600;
+}
+
+.comment-cell {
+	line-height: 1.5;
+	color: #334155;
+	word-break: break-word;
+}
+
+.text-muted {
+	color: #64748b;
+}
+
+.spinner-box {
+	margin-top: 20px;
+	text-align: center;
+}
+
+.spinner {
+	border: 3px solid #f3f3f3;
+	border-top: 3px solid #2563eb;
+	border-radius: 50%;
+	width: 28px;
+	height: 28px;
+	animation: spin 0.8s linear infinite;
+	margin: 0 auto 10px auto;
+}
+
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+.hidden {
+	display: none !important;
+}
+.tabs-header {
+	display: flex;
+	gap: 10px;
+	border-bottom: 2px solid #e2e8f0;
+	margin-bottom: 20px;
+}
+
+.tab-btn {
+	background: none;
+	color: #64748b;
+	border: none;
+	padding: 10px 20px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	margin: 0;
+	width: auto;
+	border-radius: 0;
+}
+
+.tab-btn.active {
+		color: #2563eb;
+		border-bottom: 2px solid #2563eb;
+}
+
+.tab-btn:hover {
+			background: #f8fafc;
+}
+.results-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	border-bottom: 2px solid #f1f5f9;
+	padding-bottom: 15px;
+	margin-bottom: 15px;
+}
+
+.download-btn {
+	background-color: #10b981;
+	color: white;
+	text-decoration: none;
+	padding: 10px 18px;
+	font-size: 14px;
+	font-weight: 600;
+	border-radius: 6px;
+	transition: background 0.2s;
+}
+
+	.download-btn:hover {
+		background-color: #059669;
+	}
+
+.supp-tag {
+	background-color: #e2e8f0;
+	color: #475569;
+	padding: 3px 8px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-family: monospace;
+}
+.visuals-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20px;
+}
+
+.chart-container {
+	flex: 1;
+	min-width: 320px;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 15px;
+	height: 340px;
+	position: relative;
+	height: 420px;
+}
+
+.chart-container h4 {
+		color: #475569;
+		font-size: 13px;
+		margin-bottom: 12px;
+		text-transform: uppercase;
+	}

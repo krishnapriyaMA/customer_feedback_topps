@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Topps Tiles Reviews Viewport Matrix</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+	<div class="dashboard-wrapper">
+		<div class="control-card">
+			<h2>Topps Reviews Extract Control Panel</h2>
+			<p class="subtitle">Scrape items, view real-time visual charts, and export data directly to Excel.</p>
+
+			<div id="error-box" class="error-msg hidden"></div>
+
+			<div class="form-group row">
+				<div class="col">
+					<label>Start Date</label>
+					<input type="date" id="startDate">
+				</div>
+				<div class="col">
+					<label>End Date</label>
+					<input type="date" id="endDate">
+				</div>
+			</div>
+
+			<div class="form-group">
+				<label>Rating Filtering</label>
+				<select id="ratingFilter" onchange="toggleFilterContexts()">
+					<option value="all">All Collected Ratings</option>
+					<option value="negative">Negative Metrics Only (1-2★)</option>
+					<option value="threshold">Below Threshold Caps</option>
+					<option value="custom">Custom Selector Checkboxes</option>
+				</select>
+			</div>
+
+			<div id="threshold-container" class="form-group conditional-box hidden">
+				<label>Threshold Cap Limit</label>
+				<select id="thresholdRating">
+					<option value="1">1 Star</option>
+					<option value="2">2 Stars</option>
+					<option value="3">3 Stars</option>
+					<option value="4">4 Stars</option>
+					<option value="5">5 Stars</option>
+				</select>
+			</div>
+
+			<div id="custom-container" class="form-group conditional-box hidden">
+				<label>Select Included Ratings</label>
+				<div class="checkbox-group">
+					<label><input type="checkbox" class="rating-cb" value="1"> 1★</label>
+					<label><input type="checkbox" class="rating-cb" value="2"> 2★</label>
+					<label><input type="checkbox" class="rating-cb" value="3"> 3★</label>
+					<label><input type="checkbox" class="rating-cb" value="4"> 4★</label>
+					<label><input type="checkbox" class="rating-cb" value="5"> 5★</label>
+				</div>
+			</div>
+
+			<button id="fetchBtn" onclick="triggerAutomation()">Fetch Reviews</button>
+
+			<div id="spinner-container" class="spinner-box hidden">
+				<div class="spinner"></div>
+				<p>Scraping rows live. Please monitor your compiler terminal...</p>
+			</div>
+		</div>
+
+		<div id="dashboard-charts-card" class="results-card hidden" style="margin-bottom: -15px;">
+			<h3 style="margin-bottom: 20px;">Visual Analytics Dashboard</h3>
+			<div class="visuals-grid">
+				<div class="chart-container">
+					<h4>Product Performance (Average Rating Score)</h4>
+					<canvas id="productChart"></canvas>
+				</div>
+				<div class="chart-container">
+					<h4>Supplier Distribution (Negative Review Volume Share)</h4>
+					<canvas id="supplierChart"></canvas>
+				</div>
+			</div>
+		</div>
+
+		<div id="results-card" class="results-card hidden">
+			<div class="results-header">
+				<h3>Extracted Items Table Grid (<span id="count-badge">0</span> records found)</h3>
+				<a href="/download-excel" class="download-btn">📥 Download Output as Excel</a>
+			</div>
+
+			<div class="table-scroll-wrapper">
+				<table>
+					<thead>
+						<tr>
+							<th style="width: 10%">SKU</th>
+							<th style="width: 15%">Supplier</th>
+							<th style="width: 20%">Product Model</th>
+							<th style="width: 10%">Rating</th>
+							<th style="width: 15%">Timeline Context</th>
+							<th style="width: 30%">Comment Data Chunk</th>
+						</tr>
+					</thead>
+					<tbody id="reviews-tbody"></tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		let currentProductChart = null;
+		let currentSupplierChart = null;
+
+		function toggleFilterContexts() {
+			const filterValue = document.getElementById('ratingFilter').value;
+			const threshBox = document.getElementById('threshold-container');
+			const customBox = document.getElementById('custom-container');
+			threshBox.classList.add('hidden');
+			customBox.classList.add('hidden');
+			if (filterValue === 'threshold') threshBox.classList.remove('hidden');
+			if (filterValue === 'custom') customBox.classList.remove('hidden');
+		}
+
+		function triggerAutomation() {
+			const errorBox = document.getElementById('error-box');
+			const fetchBtn = document.getElementById('fetchBtn');
+			const spinner = document.getElementById('spinner-container');
+			const resultsCard = document.getElementById('results-card');
+			const chartsCard = document.getElementById('dashboard-charts-card');
+			const tbody = document.getElementById('reviews-tbody');
+
+			errorBox.classList.add('hidden');
+			resultsCard.classList.add('hidden');
+			chartsCard.classList.add('hidden');
+			tbody.innerHTML = '';
+
+			let customRatings = [];
+			document.querySelectorAll('.rating-cb:checked').forEach(cb => customRatings.push(cb.value));
+
+			fetchBtn.disabled = true;
+			fetchBtn.classList.add('disabled');
+			spinner.classList.remove('hidden');
+
+			fetch('/process', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					startDate: document.getElementById('startDate').value,
+					endDate: document.getElementById('endDate').value,
+					ratingFilter: document.getElementById('ratingFilter').value,
+					thresholdRating: document.getElementById('thresholdRating').value,
+					customRatings: customRatings
+				})
+			})
+				.then(res => res.json())
+				.then(data => {
+					if (!data.success) throw new Error(data.error || 'Automation processing failure.');
+					if (data.reviews.length === 0) throw new Error("No reviews matched your filters.");
+
+					document.getElementById('count-badge').innerText = data.reviews.length;
+
+					let prodAggr = {};
+					let suppAggr = {};
+
+					data.reviews.forEach(rev => {
+						const tr = document.createElement('tr');
+						tr.innerHTML = `
+							<td><strong>${rev.SKU}</strong></td>
+							<td><span class="supp-tag">${rev["Supplier Code"]}</span></td>
+							<td>${rev["Product Name"]}</td>
+							<td><span class="badge-rating">${rev.Rating}</span></td>
+							<td class="text-muted">${rev["Date Context"]}</td>
+							<td class="comment-cell">${rev["Comment Body"]}</td>
+						`;
+						tbody.appendChild(tr);
+
+						// Calculations for Dashboard Charts
+						if (!prodAggr[rev.SKU]) prodAggr[rev.SKU] = { name: rev["Product Name"], count: 0, sum: 0 };
+						prodAggr[rev.SKU].count++;
+						prodAggr[rev.SKU].sum += rev.rating_num;
+
+						if (!suppAggr[rev["Supplier Code"]]) suppAggr[rev["Supplier Code"]] = { count: 0 };
+						suppAggr[rev["Supplier Code"]].count++;
+					});
+
+					chartsCard.classList.remove('hidden');
+					resultsCard.classList.remove('hidden');
+
+					// Fire dashboard charts generator
+					generateCharts(prodAggr, suppAggr,data.reviews);
+				})
+				.catch(err => {
+					errorBox.innerText = err.message;
+					errorBox.classList.remove('hidden');
+				})
+				.finally(() => {
+					fetchBtn.disabled = false;
+					fetchBtn.classList.remove('disabled');
+					spinner.classList.add('hidden');
+				});
+		}
+		function generateCharts(prodData, suppData, allReviews) {
+			if (currentProductChart) currentProductChart.destroy();
+			if (currentSupplierChart) currentSupplierChart.destroy();
+
+			const productLabels = Object.keys(prodData).map(sku => `${prodData[sku].name} (${sku})`);
+			const productAverages = Object.keys(prodData).map(sku => (prodData[sku].sum / prodData[sku].count).toFixed(1));
+
+			// --- Bar Chart 1: Product Performance (unchanged) ---
+			const ctxProd = document.getElementById('productChart').getContext('2d');
+			currentProductChart = new Chart(ctxProd, {
+				type: 'bar',
+				data: {
+					labels: productLabels,
+					datasets: [{
+						label: 'Average Score (out of 5★)',
+						data: productAverages,
+						backgroundColor: '#2563eb',
+						borderRadius: 4
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					indexAxis: 'y',
+					layout: { padding: { left: 10 } },
+					scales: {
+						x: { min: 0, max: 5 },
+						y: { ticks: { autoSkip: false, font: { size: 11 } } }
+					},
+					plugins: { legend: { display: true } }
+				}
+			});
+
+			// --- Bar Chart 2: % Negative Reviews (1-2★) per Supplier, worst first ---
+			const supplierStats = {}; // { code: { total, negative } }
+			allReviews.forEach(rev => {
+				const code = rev["Supplier Code"];
+				if (!supplierStats[code]) supplierStats[code] = { total: 0, negative: 0 };
+				supplierStats[code].total++;
+				if (rev.rating_num <= 4) supplierStats[code].negative++;
+			});
+
+			const supplierList = Object.entries(supplierStats)
+				.map(([code, v]) => ({
+					code,
+					total: v.total,
+					negative: v.negative,
+					pct: (v.negative / v.total) * 100
+				}))
+				.sort((a, b) => b.pct - a.pct); // worst offenders first
+
+			const barColor = (pct) => pct >= 30 ? '#ef4444' : pct >= 10 ? '#f59e0b' : '#10b981';
+
+			const ctxSupp = document.getElementById('supplierChart').getContext('2d');
+			currentSupplierChart = new Chart(ctxSupp, {
+				type: 'bar',
+				data: {
+					labels: supplierList.map(s => `${s.code} (${s.total})`),
+					datasets: [{
+						label: '% Negative Reviews (1-2★)',
+						data: supplierList.map(s => s.pct.toFixed(1)),
+						backgroundColor: supplierList.map(s => barColor(s.pct)),
+						borderRadius: 4
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					indexAxis: 'y',
+					layout: { padding: { left: 10 } },
+					scales: {
+						x: { min: 0, max: 100, ticks: { callback: v => v + '%' } },
+						y: { ticks: { autoSkip: false, font: { size: 10 } } }
+					},
+					plugins: {
+						legend: { display: false },
+						tooltip: {
+							callbacks: {
+								label: ctx => {
+									const s = supplierList[ctx.dataIndex];
+									return `${s.negative} of ${s.total} reviews negative (${s.pct.toFixed(1)}%)`;
+								}
+							}
+						}
+					}
+				}
+			});
+		}
+	</script>
+</body>
+</html>
