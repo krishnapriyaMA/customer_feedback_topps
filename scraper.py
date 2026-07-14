@@ -14,30 +14,7 @@ def extract_review_date_str(review_text: str) -> str:
     return "Recent"
 
 
-NOISE_PATTERNS = [
-    r"\d\s+stars?\s+stars(\s+\d\s+stars?\s+stars)*",          # star breakdown bar
-    r"[\w /]+,\s*\d\.\d\s+out of 5",                          # sub-ratings e.g. "Quality of product, 3.0 out of 5"
-    r"\bOverall look/style of product\b",
-    r"\bQuality of product\b",
-    r"\bValue for money\b",
-    r"\bCustomer Images and Videos\b",
-    r"\bReport\b",
-    r"\bHelpful\?\b",
-    r"\bRating\b",
-    r"\b(purchase|quality|cutting|installation|product availability|cleaning|shortcoming|closing|ease of use|finish)\b",
-]
-import re
-import re
-
-
 def extract_comment_body(review_text: str) -> str:
-    """
-    Isolates and extracts ONLY the core review comment text block.
-    Anchors on the reviewer's own rating marker ("X out of 5 stars.")
-    and the date that immediately follows it, then captures everything
-    after that up to the next known stop marker (Q&A, recommend
-    footer, or a seller response block).
-    """
     m = re.search(
         r"\d\s+out\s+of\s+5\s+stars\.\s*.*?"
         r"(?:\d+\s+)?(?:day|week|month|year)s?\s+ago\s*(.*)",
@@ -45,32 +22,29 @@ def extract_comment_body(review_text: str) -> str:
     )
     if not m:
         return "Empty Comment"
- 
+
     comment = m.group(1)
- 
+
     stop_match = re.search(
         r"(Q:|Yes, I recommend|No, I do not recommend|Response from|Originally posted on)",
         comment, re.IGNORECASE
     )
     if stop_match:
         comment = comment[:stop_match.start()]
- 
+
     comment = re.sub(r"\s+", " ", comment).strip()
     return comment if comment else "Empty Comment"
+
+
 def extract_originally_posted_product(review_text: str):
-    """
-    If this review carries an 'Originally posted on <product>' footer,
-    return that product name. Returns None if the review is native to
-    the current page (no syndication footer at all).
-    """
     match = re.search(r"Originally posted on\s+(.+)", review_text, re.IGNORECASE)
     if not match:
         return None
     name = match.group(1)
-    # cut at the block separator / next junk section if present
     name = re.split(r"={5,}|\n\(0\)|\nReport\b", name)[0]
     return name.strip()
- 
+
+
 def normalize_product_name(name: str) -> str:
     if not name:
         return ""
@@ -78,36 +52,34 @@ def normalize_product_name(name: str) -> str:
     name = name.replace("™", "").replace("®", "")
     name = re.sub(r"\s+", " ", name).strip()
     return name
+
+
 def extract_review_datetime_obj(date_str: str) -> datetime.date:
     today = datetime.date.today()
     clean_text = date_str.lower()
-    
-    # 1. Matches "a year ago" or "2 years ago"
-    if "year" in clean_text: 
+
+    if "year" in clean_text:
         match = re.search(r"(\d+)", clean_text)
         years = int(match.group(1)) if match else 1
         return today - datetime.timedelta(days=365 * years)
-        
-    # 2. Matches "7 months ago" or "a month ago"
+
     if "month" in clean_text:
         match = re.search(r"(\d+)", clean_text)
         months = int(match.group(1)) if match else 1
         return today - datetime.timedelta(days=30 * months)
-        
-    # 3. Matches "3 weeks ago" or "a week ago"
+
     if "week" in clean_text:
         match = re.search(r"(\d+)", clean_text)
         weeks = int(match.group(1)) if match else 1
         return today - datetime.timedelta(days=7 * weeks)
-        
-    # 4. Matches "4 days ago" or "yesterday"
+
     if "day" in clean_text or "yesterday" in clean_text:
         match = re.search(r"(\d+)", clean_text)
         days = int(match.group(1)) if match else 1
         return today - datetime.timedelta(days=days)
-        
-    # Default fallback if format doesn't match standard terms
+
     return today
+
 
 def pass_rating_filter(rating: int, rating_type: str, threshold: int = None, selected_ratings: list = None) -> bool:
     if rating_type == "all": return True
@@ -121,7 +93,7 @@ def pass_date_filter(review_date: datetime.date, start_date: datetime.date, end_
     if end_date and review_date > end_date: return False
     return True
 
-def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: str, rating_type: str, threshold: int, selected_ratings: list):
+def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: str, rating_type: str, threshold: int, selected_ratings: list, progress_callback=None):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
 
@@ -131,26 +103,32 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
         return False, f"Failed reading Excel: {str(e)}"
 
     scraped_records = []
+    total_rows = len(df)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-    headless=True,
-    args=[
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--single-process"
-    ]
-)
-        
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--single-process"
+            ]
+        )
+
         for index, row in df.iterrows():
             url = str(row["Website Link"]).strip()
             sku = str(row.get("SKU", "N/A"))
-            supplier = str(row.get("Supplier Code", "Unknown Supplier")) 
-            
+            supplier = str(row.get("Supplier Code", "Unknown Supplier"))
+
             if not url or url == "nan" or not url.startswith("http"):
                 continue
+
+            # Report progress before starting this row so the frontend
+            # can show "currently processing SKU X" in real time.
+            if progress_callback:
+                progress_callback(sku=sku, index=index + 1, total=total_rows, status="processing")
 
             print(f"🚀 Working Row {index+1}: [SKU: {sku}] -> {url}")
             context = browser.new_context(viewport={"width": 1600, "height": 900})
@@ -175,7 +153,7 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
                 page_no = 1
                 while True:
                     container = page.locator("div.b-a.b-col-4.b-w-2.bg-col-51")
-                    if not container.is_visible(timeout=2000): 
+                    if not container.is_visible(timeout=2000):
                         break
 
                     text = container.inner_text()
@@ -214,7 +192,7 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
                         btn_class = next_btn.get_attribute("class") or ""
                         if "disabled" in btn_class:
                             break
- 
+
                         next_btn.click()
                         page.wait_for_timeout(3000)
                         page_no += 1
@@ -225,7 +203,10 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
                 print(f"⚠️ Row Exception handled: {str(e)}")
             finally:
                 context.close()
-                
+
         browser.close()
+
+    if progress_callback:
+        progress_callback(sku=None, index=total_rows, total=total_rows, status="done")
 
     return True, scraped_records

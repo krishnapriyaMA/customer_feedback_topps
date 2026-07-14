@@ -1,20 +1,36 @@
 import os
+import threading
 import traceback
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_file
 from scraper import run_scraper_to_memory
 
 app = Flask(__name__)
-
 INPUT_FILE = "data/input.xlsx"
 OUTPUT_FILE = "downloads/Topps_Reviews_Output.xlsx"
-
 os.makedirs("data", exist_ok=True)
 os.makedirs("downloads", exist_ok=True)
+
+# Shared progress state, updated by the scraper via its callback,
+# read by the frontend via polling /progress
+progress_state = {"sku": None, "index": 0, "total": 0, "status": "idle"}
+progress_lock = threading.Lock()
+
+def update_progress(sku, index, total, status):
+    with progress_lock:
+        progress_state["sku"] = sku
+        progress_state["index"] = index
+        progress_state["total"] = total
+        progress_state["status"] = status
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/progress")
+def progress():
+    with progress_lock:
+        return jsonify(dict(progress_state))
 
 @app.route("/process", methods=["POST"])
 def process():
@@ -25,26 +41,25 @@ def process():
         rating_filter = data.get("ratingFilter", "all")
         threshold_val = data.get("thresholdRating")
         custom_ratings = data.get("customRatings", [])
-
         threshold = int(threshold_val) if (rating_filter == "threshold" and threshold_val) else None
         selected_ratings = [int(r) for r in custom_ratings] if (rating_filter == "custom" and custom_ratings) else []
-
         if not os.path.exists(INPUT_FILE):
             return jsonify({"error": f"Input workbook 'data/input.xlsx' not found."}), 400
 
-        # Run scraper loop 
+        update_progress(None, 0, 0, "starting")
+
+        # Run scraper loop
         success, result_data = run_scraper_to_memory(
             input_path=INPUT_FILE,
             start_date_str=start_date,
             end_date_str=end_date,
             rating_type=rating_filter,
             threshold=threshold,
-            selected_ratings=selected_ratings
+            selected_ratings=selected_ratings,
+            progress_callback=update_progress
         )
-
         if not success:
             return jsonify({"error": result_data}), 500
-
         # Also save to an Excel file automatically in the background
         if result_data:
             export_df = pd.DataFrame(result_data)
@@ -52,9 +67,7 @@ def process():
             if "rating_num" in export_df.columns:
                 export_df = export_df.drop(columns=["rating_num"])
             export_df.to_excel(OUTPUT_FILE, index=False)
-
         return jsonify({"success": True, "reviews": result_data})
-
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"Backend Error: {str(e)}"}), 500
@@ -71,5 +84,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         debug=False,
-        use_reloader=False
+        use_reloader=False,
+        threaded=True
     )

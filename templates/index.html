@@ -63,7 +63,7 @@
 
 			<div id="spinner-container" class="spinner-box hidden">
 				<div class="spinner"></div>
-				<p>Scraping rows live. Please monitor your compiler terminal...</p>
+				<p id="progress-text">Scraping rows live. Please monitor your compiler terminal...</p>
 			</div>
 		</div>
 
@@ -75,7 +75,7 @@
 					<canvas id="productChart"></canvas>
 				</div>
 				<div class="chart-container">
-					<h4>Supplier Distribution (Negative Review Volume Share)</h4>
+					<h4>Supplier Negative Review Rate</h4>
 					<canvas id="supplierChart"></canvas>
 				</div>
 			</div>
@@ -108,6 +108,7 @@
 	<script>
 		let currentProductChart = null;
 		let currentSupplierChart = null;
+		let progressInterval = null;
 
 		function toggleFilterContexts() {
 			const filterValue = document.getElementById('ratingFilter').value;
@@ -117,6 +118,32 @@
 			customBox.classList.add('hidden');
 			if (filterValue === 'threshold') threshBox.classList.remove('hidden');
 			if (filterValue === 'custom') customBox.classList.remove('hidden');
+		}
+
+		function startProgressPolling() {
+			const progressText = document.getElementById('progress-text');
+			progressText.innerText = 'Starting scraper...';
+			progressInterval = setInterval(() => {
+				fetch('/progress')
+					.then(res => res.json())
+					.then(p => {
+						if (p.status === 'processing' && p.sku) {
+							progressText.innerText = `Processing SKU ${p.sku} (${p.index} of ${p.total})`;
+						} else if (p.status === 'starting') {
+							progressText.innerText = 'Starting scraper...';
+						} else if (p.status === 'done') {
+							progressText.innerText = 'Finishing up...';
+						}
+					})
+					.catch(() => { });
+			}, 1000);
+		}
+
+		function stopProgressPolling() {
+			if (progressInterval) {
+				clearInterval(progressInterval);
+				progressInterval = null;
+			}
 		}
 
 		function triggerAutomation() {
@@ -138,6 +165,7 @@
 			fetchBtn.disabled = true;
 			fetchBtn.classList.add('disabled');
 			spinner.classList.remove('hidden');
+			startProgressPolling();
 
 			fetch('/process', {
 				method: 'POST',
@@ -163,13 +191,13 @@
 					data.reviews.forEach(rev => {
 						const tr = document.createElement('tr');
 						tr.innerHTML = `
-							<td><strong>${rev.SKU}</strong></td>
-							<td><span class="supp-tag">${rev["Supplier Code"]}</span></td>
-							<td>${rev["Product Name"]}</td>
-							<td><span class="badge-rating">${rev.Rating}</span></td>
-							<td class="text-muted">${rev["Date Context"]}</td>
-							<td class="comment-cell">${rev["Comment Body"]}</td>
-						`;
+									<td><strong>${rev.SKU}</strong></td>
+									<td><span class="supp-tag">${rev["Supplier Code"]}</span></td>
+									<td>${rev["Product Name"]}</td>
+									<td><span class="badge-rating">${rev.Rating}</span></td>
+									<td class="text-muted">${rev["Date Context"]}</td>
+									<td class="comment-cell">${rev["Comment Body"]}</td>
+								`;
 						tbody.appendChild(tr);
 
 						// Calculations for Dashboard Charts
@@ -185,7 +213,7 @@
 					resultsCard.classList.remove('hidden');
 
 					// Fire dashboard charts generator
-					generateCharts(prodAggr, suppAggr,data.reviews);
+					generateCharts(prodAggr, suppAggr, data.reviews);
 				})
 				.catch(err => {
 					errorBox.innerText = err.message;
@@ -195,8 +223,10 @@
 					fetchBtn.disabled = false;
 					fetchBtn.classList.remove('disabled');
 					spinner.classList.add('hidden');
+					stopProgressPolling();
 				});
 		}
+
 		function generateCharts(prodData, suppData, allReviews) {
 			if (currentProductChart) currentProductChart.destroy();
 			if (currentSupplierChart) currentSupplierChart.destroy();
@@ -204,7 +234,7 @@
 			const productLabels = Object.keys(prodData).map(sku => `${prodData[sku].name} (${sku})`);
 			const productAverages = Object.keys(prodData).map(sku => (prodData[sku].sum / prodData[sku].count).toFixed(1));
 
-			// --- Bar Chart 1: Product Performance (unchanged) ---
+			// --- Bar Chart 1: Product Performance ---
 			const ctxProd = document.getElementById('productChart').getContext('2d');
 			currentProductChart = new Chart(ctxProd, {
 				type: 'bar',
@@ -236,7 +266,7 @@
 				const code = rev["Supplier Code"];
 				if (!supplierStats[code]) supplierStats[code] = { total: 0, negative: 0 };
 				supplierStats[code].total++;
-				if (rev.rating_num <= 4) supplierStats[code].negative++;
+				if (rev.rating_num <= 2) supplierStats[code].negative++;
 			});
 
 			const supplierList = Object.entries(supplierStats)
