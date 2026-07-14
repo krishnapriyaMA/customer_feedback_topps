@@ -33,8 +33,10 @@
     <Folder Include="templates\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include=".gitignore" />
     <Content Include="data\input.xlsx" />
     <Content Include="requirements.txt" />
+    <Content Include="runtime.txt" />
     <Content Include="static\style.css" />
     <Content Include="templates\index.html" />
   </ItemGroup>

@@ -133,7 +133,16 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
     scraped_records = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+    headless=True,
+    args=[
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process"
+    ]
+)
         
         for index, row in df.iterrows():
             url = str(row["Website Link"]).strip()
