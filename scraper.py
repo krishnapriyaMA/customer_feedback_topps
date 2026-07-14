@@ -79,7 +79,11 @@ def extract_review_datetime_obj(date_str: str) -> datetime.date:
         return today - datetime.timedelta(days=days)
 
     return today
-
+def block_heavy_resources(route):
+    if route.request.resource_type in ("image", "media", "font"):
+        route.abort()
+    else:
+        route.continue_()
 
 def pass_rating_filter(rating: int, rating_type: str, threshold: int = None, selected_ratings: list = None) -> bool:
     if rating_type == "all": return True
@@ -106,18 +110,19 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
     total_rows = len(df)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
+        
+
+        for index, row in df.iterrows():
+            browser = p.chromium.launch(
             headless=True,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--single-process"
+                "--disable-gpu"
+                
             ]
         )
-
-        for index, row in df.iterrows():
             url = str(row["Website Link"]).strip()
             sku = str(row.get("SKU", "N/A"))
             supplier = str(row.get("Supplier Code", "Unknown Supplier"))
@@ -131,8 +136,9 @@ def run_scraper_to_memory(input_path: str, start_date_str: str, end_date_str: st
                 progress_callback(sku=sku, index=index + 1, total=total_rows, status="processing")
 
             print(f"🚀 Working Row {index+1}: [SKU: {sku}] -> {url}")
-            context = browser.new_context(viewport={"width": 1600, "height": 900})
+            context = browser.new_context(viewport={"width": 1024, "height": 768})
             page = context.new_page()
+            page.route("**/*", block_heavy_resources)
             product_name = "Unknown Product"
 
             try:
